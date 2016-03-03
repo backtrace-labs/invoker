@@ -1,0 +1,28 @@
+.PHONY: all install uninstall clean distclean
+
+CC := @CC@
+CFLAGS := @CFLAGS@
+BUILD_DIR=@BUILD_DIR@
+PREFIX := @PREFIX@
+
+all: invoker
+
+%: %.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+install: all
+	mkdir -p $(DESTDIR)/$(PREFIX)/bin || exit
+	cp invoker $(DESTDIR)/$(PREFIX)/bin/invoker || exit
+	chmod 755 $(DESTDIR)/$(PREFIX)/bin/invoker
+	@echo
+	@echo
+	@echo ---[ invoker has installed successfully.
+
+uninstall:
+	rm -f $(DESTDIR)/$(PREFIX)/bin/invoker
+
+clean:
+	rm -f $(BUILD_DIR)/*.o invoker
+
+distclean: clean
+	rm -f $(BUILD_DIR)/Makefile $(BUILD_DIR)/autoconf.h

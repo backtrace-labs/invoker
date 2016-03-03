@@ -1,0 +1,7 @@
+#ifndef INVOKER_AUTOCONF_H
+#define INVOKER_AUTOCONF_H
+
+#define AUTOCONF_VERSION "@VERSION@"
+#define PREFIX "@PREFIX@"
+
+#endif /* INVOKER_AUTOCONF_H */
