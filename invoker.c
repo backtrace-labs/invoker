@@ -79,6 +79,8 @@ inv_log_syslog(int level, const char *fmt, ...)
 	va_start(ap, fmt);
 	vsyslog(level, fmt, ap);
 	va_end(ap);
+
+	return;
 }
 
 static void
@@ -90,6 +92,8 @@ inv_log_stderr(int level, const char *fmt, ...)
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
+
+	return;
 }
 
 static bool
@@ -334,15 +338,13 @@ execute_tracers(struct tracer *t, int n)
 }
 
 /*
- * 1. Parse command line arguments
- * 2. Suspend/block and handle SIGCONT correctly
- * 3. Wake, perform compatibility actions (read (and discard) anything off stdin)
- * 4. Parse tracer format string argument
- * 5. Fork-exec configured tracer
- * 6. Enter waitpid loop
- * 7. Return success/failure depending on tracer return
- *
- * For now, we can support most ptrace configuration via its configuration file.
+ * 1. Parse command line arguments.
+ * 2. Suspend/block and handle SIGCONT correctly.
+ * 3. Wake, perform compatibility actions (read (and discard) anything off stdin).
+ * 4. Parse tracer format string argument.
+ * 5. Fork-exec configured tracers.
+ * 6. Enter waitpid loop.
+ * 7. Return success/failure depending on tracer returns.
  */
 int
 main(int argc, char *argv[])
