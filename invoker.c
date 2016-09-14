@@ -408,7 +408,7 @@ main(int argc, char *argv[])
 			}
 
 			++n;
-			
+
 			break;
 		case 'w':
 			suspend = true;
