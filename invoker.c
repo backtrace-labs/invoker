@@ -444,7 +444,7 @@ main(int argc, char *argv[])
 	if (suspend == true) {
 		/*
 		 * The invoker may be called on its parent. This leaves us in
-		 * the following situation: 
+		 * the following situation:
 		 * 1. The invoker may be a child tracing its parent.
 		 * 2. Thus, the invoker will likely not be fork-exec'd only
 		 *    when it's needed; it must have a mechanism for blocking
