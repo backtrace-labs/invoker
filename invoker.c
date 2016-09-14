@@ -428,12 +428,11 @@ main(int argc, char *argv[])
 			usage(stdout);
 			break;
 		case 'o':
-			config.log(LOG_WARNING, "Ignoring host option "
-			    "(arg: %s).\n", optarg);
-			break;
 		case 's':
-			config.log(LOG_WARNING, "Ignoring syslog option "
-			    "(arg: %s).\n", optarg);
+			/*
+			 * These options are purposefully ignored. Backtrace
+			 * will already extract this information.
+			 */
 			break;
 		case '?':
 		default:
