@@ -30,6 +30,8 @@ struct tracer {
 	char **args;
 };
 
+static sig_atomic_t continued = 0;
+
 static void
 usage(FILE *fp)
 {
@@ -69,6 +71,16 @@ usage(FILE *fp)
 );
 
 	exit(st[fp == stderr]);
+}
+
+static void
+continue_handler(int unused)
+{
+
+	(void)unused;
+
+	continued = 1;
+	return;
 }
 
 static void
@@ -354,6 +366,9 @@ main(int argc, char *argv[])
 	bool suspend = false;
 	bool use_ats_compatibility = true;
 
+	/* Establish SIGCONT handler as early as lazily possible. */
+	(void)signal(SIGCONT, continue_handler);
+
 	openlog("invoker", LOG_PID, LOG_DAEMON);
 	config.log = inv_log_syslog;
 
@@ -456,9 +471,11 @@ main(int argc, char *argv[])
 			config.log(LOG_ERR, "failed to set death signal: %s\n",
 			    strerror(errno));
 		}
-
 #endif /* __linux__ && PR_SET_PDEATHSIG */
-		raise(SIGSTOP);
+
+		/* Raise signal only if continue signal wasn't received. */
+		if (continued == 0)
+			raise(SIGSTOP);
 	}
 
 	if (config.target == 0) {
