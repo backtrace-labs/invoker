@@ -368,17 +368,6 @@ execute_tracers(struct tracer *t, int n)
 int
 main(int argc, char *argv[])
 {
-	struct tracer tracers[MAX_TRACERS];
-	int n = 0;
-	bool suspend = false;
-	bool use_ats_compatibility = true;
-	pid_t parent = getppid();
-
-	/* Establish SIGCONT handler as early as lazily possible. */
-	(void)signal(SIGCONT, continue_handler);
-
-	openlog("invoker", LOG_PID, LOG_DAEMON);
-	config.log = inv_log_syslog;
 
 	static struct option options[] = {
 	    { "target", required_argument, 0, 'p' },
@@ -392,6 +381,22 @@ main(int argc, char *argv[])
 	    { "help", no_argument, 0, 'h' },
 	    { NULL, 0, 0, 0 }
 	};
+	struct tracer tracers[MAX_TRACERS];
+	bool suspend = false;
+	bool use_ats_compatibility = true;
+	pid_t parent = getppid();
+	int n = 0;
+
+	/* Establish SIGCONT handler as early as lazily possible. */
+	(void)signal(SIGCONT, continue_handler);
+
+	openlog("invoker", LOG_PID, LOG_DAEMON);
+	config.log = inv_log_syslog;
+
+	if (parent == 1) {
+		config.log(LOG_ERR, "parent process has already died\n");
+		exit(EXIT_FAILURE);
+	}
 
 	for (;;) {
 		int c;
@@ -465,21 +470,21 @@ main(int argc, char *argv[])
 	}
 
 	if (suspend == true) {
-		/*
-		 * The invoker may be called on its parent. This leaves us in
-		 * the following situation:
-		 * 1. The invoker may be a child tracing its parent.
-		 * 2. Thus, the invoker will likely not be fork-exec'd only
-		 *    when it's needed; it must have a mechanism for blocking
-		 *    itself for however long is necessary.
-		 * 3. The simplest mechanism is a SIGSTOP/SIGCONT.
-		 */
 #if defined(__linux__) && defined(PR_SET_PDEATHSIG)
 		if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) == -1) {
 			config.log(LOG_ERR, "failed to set death signal: %s\n",
 			    strerror(errno));
 		}
 #endif /* __linux__ && PR_SET_PDEATHSIG */
+
+		/*
+		 * It is possible that the parent process has died before
+		 * we have had the opportunity to call into prctl. We must
+		 * check that the parent process continues to exist before
+		 * blocking.
+		 */
+		if (getppid() != parent)
+			exit(EXIT_FAILURE);
 
 		/* Raise signal only if continue signal wasn't received. */
 		if (continued == 0)
