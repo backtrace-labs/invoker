@@ -34,7 +34,7 @@ EXIT_FAILURE=1
 
 P_PWD=`pwd`
 MAINTAINER='team@backtrace.io'
-VERSION=${VERSION:-'0.2.0'}
+VERSION=${VERSION:-'0.3.0'}
 VERSION_MAJOR='0'
 PREFIX=${PREFIX:-"/opt/backtrace"}
 
