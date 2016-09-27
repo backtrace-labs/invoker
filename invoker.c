@@ -156,6 +156,13 @@ ats_compatibility(void)
 	}
 #endif /* __linux__ */
 
+	/*
+	 * Versions of traffic_manager may set euid of the parent process
+	 * to administrator.
+	 */
+	if (getuid() == 0 && seteuid(0) == -1)
+		return;
+
 	return;
 }
 
@@ -365,6 +372,7 @@ main(int argc, char *argv[])
 	int n = 0;
 	bool suspend = false;
 	bool use_ats_compatibility = true;
+	pid_t parent = getppid();
 
 	/* Establish SIGCONT handler as early as lazily possible. */
 	(void)signal(SIGCONT, continue_handler);
@@ -477,6 +485,13 @@ main(int argc, char *argv[])
 		if (continued == 0)
 			raise(SIGSTOP);
 	}
+
+	/*
+	 * It is possible to have been woken up after the parent process
+	 * has died. In this case, it is pointless to trace the parent.
+	 */
+	if (getppid() != parent)
+		return 0;
 
 	if (config.target == 0) {
 		config.target = getppid();
