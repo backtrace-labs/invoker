@@ -1,10 +1,12 @@
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
@@ -42,6 +44,8 @@ usage(FILE *fp)
 "    -p, --target=<pid>            Target process to trace. If left\n"
 "                                  unspecified, the parent process will be\n"
 "                                  traced.\n\n"
+"    -P, --pid-file=<path>         Specifies a PID file. On start-up, the\n"
+"                                  associated PID is killed.\n"
 "    -t, --tracer=<path args>      Tracer to run against the target process.\n"
 "                                  If left unspecified, backtrace_ptrace will\n"
 "                                  be used (from its standard installation\n"
@@ -372,6 +376,7 @@ main(int argc, char *argv[])
 	static struct option options[] = {
 	    { "target", required_argument, 0, 'p' },
 	    { "tracer", required_argument, 0, 't' },
+	    { "pid-file", required_argument, 0, 'P' },
 	    { "wait", no_argument, 0, 'w' },
 	    { "no-ats-compatibility", no_argument, 0, 'n'},
 	    { "debug", no_argument, 0, 'd'},
@@ -384,7 +389,9 @@ main(int argc, char *argv[])
 	struct tracer tracers[MAX_TRACERS];
 	bool suspend = false;
 	bool use_ats_compatibility = true;
+	const char *pidfile = NULL;
 	pid_t parent = getppid();
+	pid_t previous_pid = 0;
 	int n = 0;
 
 	/* Establish SIGCONT handler as early as lazily possible. */
@@ -401,12 +408,15 @@ main(int argc, char *argv[])
 	for (;;) {
 		int c;
 
-		c = getopt_long(argc, argv, "p:t:a:sndvh", options, NULL);
+		c = getopt_long(argc, argv, "wP:p:t:a:sndvh", options, NULL);
 		if (c == -1) {
 			break;
 		}
 
 		switch (c) {
+		case 'P':
+			pidfile = optarg;
+			break;
 		case 'p':
 			errno = 0;
 			config.target = (pid_t)strtol(optarg, NULL, 10);
@@ -469,8 +479,87 @@ main(int argc, char *argv[])
 		}
 	}
 
+	if (pidfile != NULL) {
+		FILE *fp;
+
+		fp = fopen(pidfile, "r");
+		if (fp == NULL && errno != ENOENT) {
+			config.log(LOG_ERR, "failed to open pid file: %s\n",
+			   strerror(errno));
+			exit(EXIT_FAILURE);
+		}
+
+		if (fp != NULL) {
+			unsigned long pd;
+
+			if (fscanf(fp, "%10lu", &pd) == 1) {
+				previous_pid = (pid_t)pd;
+			} else {
+				config.log(LOG_ERR, "malformed pid file\n");
+			}
+
+			fclose(fp);
+		}
+
+		fp = fopen(pidfile, "w");
+		if (fp == NULL)
+			goto fail_pidfile;
+
+		if (fprintf(fp, "%ju", (uintmax_t)getpid()) == -1)
+			goto fail_pidfile;
+
+		fclose(fp);
+	}
+
+#ifdef __linux__
+	/*
+	 * If a previous PID exists then verify that it is the same invoker
+	 * executable.
+	 */
+	if (previous_pid != 0) {
+		char path[PATH_MAX];
+		char image[PATH_MAX];
+
+		sprintf(path, "/proc/%ju/exe", (uintmax_t)previous_pid);
+
+		memset(image, 0, sizeof image);
+		if (readlink(path, image, sizeof image) == -1) {
+			if (errno == ENOENT)
+				goto skip_pid;
+
+			config.log(LOG_ERR,
+			    "failed to verify previous instance\n");
+			goto skip_pid;
+		}
+		image[PATH_MAX - 1] = '\0';
+
+		memset(path, 0, sizeof path);
+		if (readlink("/proc/self/exe", path, sizeof path) == -1) {
+			config.log(LOG_ERR,
+			    "failed to verify current instance\n");
+			goto skip_pid;
+		}
+		path[PATH_MAX - 1] = '\0';
+
+		/*
+		 * Previous instance of invoker exist, kill it with prejudice.
+		 */
+		if (strcmp(path, image) == 0)
+			kill(previous_pid, SIGKILL);
+	}
+#else
+	(void)previous_pid;
+
+	config.log(LOG_WARNING, "PID file is ignored on non-Linux\n");
+#endif /* __linux__ */
+
+skip_pid:
 	if (suspend == true) {
 #if defined(__linux__) && defined(PR_SET_PDEATHSIG)
+		/*
+		 * Unfortunately, there are situations that cause the SIGKILL
+		 * signal to be sent.
+		 */
 		if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) == -1) {
 			config.log(LOG_ERR, "failed to set death signal: %s\n",
 			    strerror(errno));
@@ -486,7 +575,11 @@ main(int argc, char *argv[])
 		if (getppid() != parent)
 			exit(EXIT_FAILURE);
 
-		/* Raise signal only if continue signal wasn't received. */
+		/*
+		 * Raise signal only if continue signal wasn't received. It
+		 * is still possible for the parent to have died prior to
+		 * the STOP signal being raised.
+		 */
 		if (continued == 0)
 			raise(SIGSTOP);
 	}
@@ -538,4 +631,8 @@ main(int argc, char *argv[])
 	}
 
 	return execute_tracers(tracers, n);
+fail_pidfile:
+	config.log(LOG_ERR, "failed to write pid file: %s\n",
+	    strerror(errno));
+	return EXIT_FAILURE;
 }
