@@ -563,7 +563,7 @@ skip_pid:
 #if defined(__linux__) && defined(PR_SET_PDEATHSIG)
 		/*
 		 * Unfortunately, there are situations that cause the SIGKILL
-		 * signal to be sent.
+		 * signal to not be sent.
 		 */
 		if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) == -1) {
 			config.log(LOG_ERR, "failed to set death signal: %s\n",
