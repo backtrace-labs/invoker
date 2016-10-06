@@ -482,6 +482,11 @@ main(int argc, char *argv[])
 	if (pidfile != NULL) {
 		FILE *fp;
 
+		/*
+		 * There is a security issue in that a user can kill invoker
+		 * processes it does not own. In practice, this should not
+		 * be a problem.
+		 */
 		fp = fopen(pidfile, "r");
 		if (fp == NULL && errno != ENOENT) {
 			config.log(LOG_ERR, "failed to open pid file: %s\n",
